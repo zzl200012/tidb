@@ -17,6 +17,8 @@ package executor_test
 import (
 	"flag"
 	"fmt"
+	testkit2 "github.com/pingcap/tidb/testkit"
+	"testing"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/domain"
@@ -497,8 +499,11 @@ func (s *testSuite11) TestOutOfRangeWithUnsigned(c *C) {
 	c.Assert(err.Error(), Equals, "[types:1690]BIGINT UNSIGNED value is out of range in '(0 - test.t.ts)'")
 }
 
-func (s *testPointGetSuite) TestIssue21447(c *C) {
-	tk1, tk2 := testkit.NewTestKit(c, s.store), testkit.NewTestKit(c, s.store)
+func TestIssue21447(t *testing.T) {
+	t.Parallel()
+	store, clean := testkit2.CreateMockStore(t)
+	defer clean()
+	tk1, tk2 := testkit2.NewTestKit(t, store), testkit2.NewTestKit(t, store)
 	tk1.MustExec("use test")
 	tk2.MustExec("use test")
 

@@ -24,7 +24,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -81,6 +83,27 @@ func (tk *TestKit) MustExec(sql string, args ...interface{}) {
 	if res != nil {
 		tk.require.NoError(res.Close())
 	}
+}
+
+// MustIndexLookup checks whether the plan for the sql is IndexLookUp.
+func (tk *TestKit) MustIndexLookup(sql string, args ...interface{}) *Result {
+	tk.require.True(tk.HasPlan(sql, "IndexLookUp", args...))
+	return tk.MustQuery(sql, args...)
+}
+
+// MustTableDual checks whether the plan for the sql is TableDual.
+func (tk *TestKit) MustTableDual(sql string, args ...interface{}) *Result {
+	tk.require.True(tk.HasPlan(sql, "TableDual", args...))
+	return tk.MustQuery(sql, args...)
+}
+
+// MustPointGet checks whether the plan for the sql is Point_Get.
+func (tk *TestKit) MustPointGet(sql string, args ...interface{}) *Result {
+	rs := tk.MustQuery("explain "+sql, args...)
+	comment := fmt.Sprintf("plan %v", rs.rows[0][0])
+	tk.require.Equal(1, len(rs.rows))
+	tk.require.True(strings.Contains(rs.rows[0][0], "Point_Get"), comment)
+	return tk.MustQuery(sql, args...)
 }
 
 // MustQuery query the statements and returns result rows.
@@ -185,6 +208,12 @@ func (tk *TestKit) ExecToErr(sql string, args ...interface{}) error {
 	return err
 }
 
+// CheckExecResult checks the affected rows and the insert id after executing MustExec.
+func (tk *TestKit) CheckExecResult(affectedRows, insertID int64) {
+	tk.require.Equal(affectedRows, int64(tk.session.AffectedRows()))
+	tk.require.Equal(insertID, int64(tk.session.LastInsertID()))
+}
+
 func newSession(t testing.TB, store kv.Storage) session.Session {
 	se, err := session.CreateSession4Test(store)
 	require.NoError(t, err)
@@ -226,6 +255,15 @@ func (tk *TestKit) MustUseIndex(sql string, index string, args ...interface{}) b
 		}
 	}
 	return false
+}
+
+// GetTableID gets table ID by name.
+func (tk *TestKit) GetTableID(tableName string) int64 {
+	dom := domain.GetDomain(tk.session)
+	is := dom.InfoSchema()
+	tbl, err := is.TableByName(model.NewCIStr("test"), model.NewCIStr(tableName))
+	tk.require.NoError(err)
+	return tbl.Meta().ID
 }
 
 // WithPruneMode run test case under prune mode.
